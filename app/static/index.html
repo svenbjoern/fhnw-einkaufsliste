@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Digitale Einkaufsliste</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header><div class="container"><span class="brand">Digitale Einkaufsliste</span><p>Gemeinsam planen. Einfach einkaufen.</p></div></header>
+  <main class="container">
+    <p id="meldung" role="alert" hidden></p>
+    <div class="layout">
+      <section class="panel" aria-labelledby="listen-titel">
+        <h1 id="listen-titel">Meine Einkaufslisten</h1>
+        <form id="listen-form">
+          <label for="listen-name">Neue Einkaufsliste</label>
+          <div class="form-row">
+            <input id="listen-name" name="name" placeholder="z. B. Migros" required>
+            <button type="submit">Erstellen</button>
+          </div>
+        </form>
+        <p id="keine-listen" hidden>Noch keine Listen. Erstelle deine erste Einkaufsliste.</p>
+        <ul id="listen" class="listen"></ul>
+      </section>
+      <section class="panel" aria-labelledby="detail-titel">
+        <h2 id="detail-titel">Dein Einkauf</h2>
+        <p id="auswahl-hinweis">Wähle eine Einkaufsliste aus.</p>
+        <div id="listen-detail" hidden>
+          <p id="fortschritt-text" aria-live="polite"></p>
+          <progress id="fortschritt" max="100" value="0" aria-label="Einkaufsfortschritt"></progress>
+          <form id="artikel-form" class="artikel-form">
+            <h3>Artikel hinzufügen</h3>
+            <label for="artikel-name">Artikelname</label>
+            <input id="artikel-name" name="name" placeholder="z. B. Milch" required>
+            <div class="form-row">
+              <div><label for="menge">Menge (optional)</label><input id="menge" name="menge" type="number" step="any" placeholder="z. B. 2"></div>
+              <div><label for="einheit">Einheit (optional)</label><input id="einheit" name="einheit" placeholder="z. B. Liter"></div>
+            </div>
+            <button type="submit">Hinzufügen</button>
+          </form>
+          <h3>Artikel</h3>
+          <p id="keine-artikel" hidden>Diese Liste ist noch leer.</p>
+          <ul id="artikel" class="artikel"></ul>
+        </div>
+      </section>
+    </div>
+  </main>
+  <dialog id="bearbeiten-dialog" aria-labelledby="bearbeiten-titel">
+    <form id="bearbeiten-form">
+      <fieldset id="bearbeiten-felder">
+        <h2 id="bearbeiten-titel">Artikel bearbeiten</h2>
+        <p id="bearbeiten-fehler" class="fehlermeldung" role="alert" hidden></p>
+        <label for="bearbeiten-name">Artikelname</label>
+        <input id="bearbeiten-name" name="name" required autofocus>
+        <div class="form-row">
+          <div><label for="bearbeiten-menge">Menge (optional)</label><input id="bearbeiten-menge" name="menge" type="number" step="any"></div>
+          <div><label for="bearbeiten-einheit">Einheit (optional)</label><input id="bearbeiten-einheit" name="einheit"></div>
+        </div>
+        <div class="dialog-aktionen">
+          <button id="bearbeiten-abbrechen" type="button" class="sekundaer">Abbrechen</button>
+          <button type="submit">Speichern</button>
+        </div>
+      </fieldset>
+    </form>
+  </dialog>
+  <dialog id="liste-bearbeiten-dialog" aria-labelledby="liste-bearbeiten-titel">
+    <form id="liste-bearbeiten-form">
+      <fieldset id="liste-bearbeiten-felder">
+        <h2 id="liste-bearbeiten-titel">Einkaufsliste bearbeiten</h2>
+        <p id="liste-bearbeiten-fehler" class="fehlermeldung" role="alert" hidden></p>
+        <label for="liste-bearbeiten-name">Name der Einkaufsliste</label>
+        <input id="liste-bearbeiten-name" name="name" required autofocus>
+        <div class="dialog-aktionen">
+          <button id="liste-bearbeiten-abbrechen" type="button" class="sekundaer">Abbrechen</button>
+          <button type="submit">Speichern</button>
+        </div>
+      </fieldset>
+    </form>
+  </dialog>
+  <footer class="container">FHNW · Webbasierte Anwendungen · Projektgruppe C</footer>
+</body>
+</html>
