@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
@@ -17,28 +17,7 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
 def datenbank_initialisieren(db_engine):
-    with db_engine.begin() as verbindung:
-        # SQLite soll auch Schemaänderungen in dieselbe Transaktion aufnehmen.
-        verbindung.exec_driver_sql("BEGIN IMMEDIATE")
-        Base.metadata.create_all(verbindung)
-        spalten = inspect(verbindung).get_columns("einkaufsartikel")
-        if any(spalte["name"] == "gekaufte_menge" for spalte in spalten):
-            return
-        verbindung.exec_driver_sql(
-            "ALTER TABLE einkaufsartikel ADD COLUMN gekaufte_menge VARCHAR NOT NULL DEFAULT '0'"
-        )
-        bereits_gekauft = verbindung.execute(text(
-            "SELECT id, menge FROM einkaufsartikel WHERE gekauft = 1 AND menge > 0"
-        ))
-        zeilen = [
-            {"id": artikel_id, "menge": str(menge)}
-            for artikel_id, menge in bereits_gekauft
-            if isinstance(menge, (int, float)) and menge < float("inf")
-        ]
-        if zeilen:
-            verbindung.execute(text(
-                "UPDATE einkaufsartikel SET gekaufte_menge = :menge, gekauft = 0 WHERE id = :id"
-            ), zeilen)
+    Base.metadata.create_all(db_engine)
 
 
 @event.listens_for(engine, "connect")
