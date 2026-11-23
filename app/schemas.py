@@ -1,16 +1,27 @@
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from app.business import Einkaufsstatus
 
 
 class ListeErstellen(BaseModel):
-    name: str
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=1)
 
 
 class ArtikelErstellen(BaseModel):
-    name: str
-    menge: float | None = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=1)
+    menge: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     einheit: str | None = None
+
+    @field_validator("menge")
+    @classmethod
+    def nachkommastellen_pruefen(cls, menge: float | None) -> float | None:
+        if menge is not None and menge != round(menge, 3):
+            raise ValueError("Die Menge darf maximal drei Nachkommastellen haben.")
+        return menge
 
 
 class ArtikelStatus(BaseModel):
@@ -18,7 +29,14 @@ class ArtikelStatus(BaseModel):
 
 
 class TeileinkaufErfassen(BaseModel):
-    zusaetzliche_menge: float
+    zusaetzliche_menge: float = Field(gt=0, allow_inf_nan=False)
+
+    @field_validator("zusaetzliche_menge")
+    @classmethod
+    def nachkommastellen_pruefen(cls, menge: float) -> float:
+        if menge != round(menge, 3):
+            raise ValueError("Die Menge darf maximal drei Nachkommastellen haben.")
+        return menge
 
 
 class ArtikelAusgabe(BaseModel):

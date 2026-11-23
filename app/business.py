@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from math import isfinite
 from typing import Literal
 
 from sqlalchemy.orm import Session
@@ -26,35 +25,8 @@ class Fortschritt:
     prozent: float
 
 
-def name_validieren(name: str) -> str:
-    name = name.strip()
-    if not name:
-        raise UngueltigeDaten("Der Name darf nicht leer sein.")
-    return name
-
-
-def menge_validieren(menge: float | None, *, null_zulaessig: bool = False) -> float | None:
-    if menge is None:
-        return None
-    if not isfinite(menge) or menge < 0 or (menge == 0 and not null_zulaessig):
-        grenze = "mindestens null" if null_zulaessig else "grösser als null"
-        raise UngueltigeDaten(f"Die Menge muss eine endliche Zahl {grenze} sein.")
-    # Nachgestellte Nullen ändern den Wert nicht (z. B. 1.500000).
-    if not hat_gueltige_praezision(menge):
-        raise UngueltigeDaten("Die Menge darf maximal drei Nachkommastellen haben.")
-    return menge
-
-
-def hat_gueltige_praezision(menge: float) -> bool:
-    return round(menge, 3) == menge
-
-
-def positive_menge(menge: float | None) -> bool:
-    return menge is not None and isfinite(menge) and menge > 0
-
-
 def restmenge_berechnen(artikel: Einkaufsartikel) -> float | None:
-    if not positive_menge(artikel.menge):
+    if artikel.menge is None:
         return None
     return round(artikel.menge - artikel.gekaufte_menge, 3)
 
@@ -87,14 +59,14 @@ def liste_finden(session: Session, liste_id: int) -> Einkaufsliste:
 
 def liste_erstellen(session: Session, name: str) -> Einkaufsliste:
     with session.begin():
-        liste = repository.liste_erstellen(session, name_validieren(name))
+        liste = repository.liste_erstellen(session, name)
     return liste
 
 
 def liste_bearbeiten(session: Session, liste_id: int, name: str) -> Einkaufsliste:
     with session.begin():
         liste = liste_finden(session, liste_id)
-        repository.liste_bearbeiten(session, liste, name_validieren(name))
+        repository.liste_bearbeiten(session, liste, name)
     return liste
 
 
@@ -108,9 +80,7 @@ def artikel_hinzufuegen(
 ) -> Einkaufsartikel:
     with session.begin():
         liste = liste_finden(session, liste_id)
-        name = name_validieren(name)
-        menge = menge_validieren(menge)
-        artikel = repository.artikel_erstellen(session, liste, name, menge, (einheit or "").strip() or None)
+        artikel = repository.artikel_erstellen(session, liste, name, menge, einheit or None)
     return artikel
 
 
@@ -125,12 +95,12 @@ def artikel_status_setzen(session: Session, artikel_id: int, gekauft: bool) -> E
 def teileinkauf_erfassen(session: Session, artikel_id: int, zusaetzliche_menge: float) -> Einkaufsartikel:
     with session.begin():
         artikel = artikel_finden(session, artikel_id)
-        if not positive_menge(artikel.menge) or not hat_gueltige_praezision(artikel.menge):
-            raise UngueltigeDaten("Teileinkäufe benötigen eine positive geplante Menge mit maximal drei Nachkommastellen.")
-        if status_berechnen(artikel) == "gekauft":
+        restmenge = restmenge_berechnen(artikel)
+        if restmenge is None:
+            raise UngueltigeDaten("Teileinkäufe benötigen eine geplante Menge.")
+        if artikel.gekauft:
             raise UngueltigeDaten("Der Artikel ist bereits vollständig gekauft.")
-        menge_validieren(zusaetzliche_menge)
-        if zusaetzliche_menge > restmenge_berechnen(artikel):
+        if zusaetzliche_menge > restmenge:
             raise UngueltigeDaten("Die zusätzlich gekaufte Menge darf die offene Restmenge nicht überschreiten.")
         artikel.gekaufte_menge = round(artikel.gekaufte_menge + zusaetzliche_menge, 3)
         artikel.gekauft = artikel.gekaufte_menge >= artikel.menge
@@ -149,20 +119,17 @@ def artikel_bearbeiten(
 ) -> Einkaufsartikel:
     with session.begin():
         artikel = artikel_finden(session, artikel_id)
-        name = name_validieren(name)
-        if menge != artikel.menge:
-            menge_validieren(menge)
-        einheit = (einheit or "").strip() or None
-        status = status_berechnen(artikel)
-        hat_einkaufsmenge = artikel.gekaufte_menge > 0
-        if hat_einkaufsmenge and (menge is not None or status == "teilweise_gekauft"):
-            if menge is None or menge < artikel.gekaufte_menge:
-                raise UngueltigeDaten("Die geplante Menge muss mindestens der bereits gekauften Menge entsprechen.")
-            if einheit != artikel.einheit:
-                raise UngueltigeDaten("Bei einer bereits gekauften Menge kann die Einheit nicht geändert werden.")
-        elif status == "gekauft":
-            # Beim Wechsel zwischen Mengenartikel und Checkbox ohne Menge
-            # bleibt ein vollständig abgehakter Artikel vollständig gekauft.
+        einheit = einheit or None
+        gekauft = artikel.gekaufte_menge
+        if menge is None and gekauft > 0 and not artikel.gekauft:
+            raise UngueltigeDaten("Bei einem teilweise gekauften Artikel muss die geplante Menge erhalten bleiben.")
+        if menge is not None and menge < gekauft:
+            raise UngueltigeDaten("Die geplante Menge muss mindestens der bereits gekauften Menge entsprechen.")
+        if menge is not None and gekauft > 0 and einheit != artikel.einheit:
+            raise UngueltigeDaten("Bei einer bereits gekauften Menge kann die Einheit nicht geändert werden.")
+
+        # Ein abgehakter Artikel behält sein Häkchen beim Wechsel zu oder von «ohne Menge».
+        if menge is None or artikel.menge is None and artikel.gekauft:
             artikel.gekaufte_menge = menge or 0
         if menge is not None:
             artikel.gekauft = artikel.gekaufte_menge >= menge
