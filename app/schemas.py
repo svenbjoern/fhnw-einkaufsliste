@@ -21,10 +21,6 @@ class TeileinkaufErfassen(BaseModel):
     zusaetzliche_menge: float
 
 
-class GekaufteMengeKorrigieren(BaseModel):
-    gekaufte_menge: float
-
-
 class ArtikelAusgabe(BaseModel):
     id: int
     einkaufsliste_id: int

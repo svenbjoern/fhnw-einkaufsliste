@@ -137,19 +137,6 @@ def teileinkauf_erfassen(session: Session, artikel_id: int, zusaetzliche_menge: 
     return artikel
 
 
-def gekaufte_menge_korrigieren(session: Session, artikel_id: int, menge: float) -> Einkaufsartikel:
-    with session.begin():
-        artikel = artikel_finden(session, artikel_id)
-        if not positive_menge(artikel.menge) or not hat_gueltige_praezision(artikel.menge):
-            raise UngueltigeDaten("Die Korrektur benötigt eine positive geplante Menge mit maximal drei Nachkommastellen.")
-        menge_validieren(menge, null_zulaessig=True)
-        if menge > artikel.menge:
-            raise UngueltigeDaten("Die gekaufte Menge darf die geplante Menge nicht überschreiten.")
-        artikel.gekaufte_menge = menge
-        artikel.gekauft = artikel.gekaufte_menge >= artikel.menge
-    return artikel
-
-
 def artikel_finden(session: Session, artikel_id: int) -> Einkaufsartikel:
     artikel = repository.artikel_finden(session, artikel_id)
     if artikel is None:

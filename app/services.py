@@ -5,7 +5,7 @@ from app import business
 from app.database import get_session
 from app.models import Einkaufsartikel, Einkaufsliste
 from app.schemas import (
-    ArtikelAusgabe, ArtikelErstellen, ArtikelStatus, Fortschritt, GekaufteMengeKorrigieren, ListeAusgabe,
+    ArtikelAusgabe, ArtikelErstellen, ArtikelStatus, Fortschritt, ListeAusgabe,
     ListeErstellen, TeileinkaufErfassen,
 )
 
@@ -69,13 +69,6 @@ def artikel_status_setzen(artikel_id: int, daten: ArtikelStatus, session: Sessio
 @router.post("/artikel/{artikel_id}/teileinkauf", response_model=ArtikelAusgabe)
 def teileinkauf_erfassen(artikel_id: int, daten: TeileinkaufErfassen, session: Session = Depends(get_session)):
     return artikel_ausgeben(business.teileinkauf_erfassen(session, artikel_id, daten.zusaetzliche_menge))
-
-
-@router.patch("/artikel/{artikel_id}/gekaufte-menge", response_model=ArtikelAusgabe)
-def gekaufte_menge_korrigieren(
-    artikel_id: int, daten: GekaufteMengeKorrigieren, session: Session = Depends(get_session),
-):
-    return artikel_ausgeben(business.gekaufte_menge_korrigieren(session, artikel_id, daten.gekaufte_menge))
 
 
 @router.put("/artikel/{artikel_id}", response_model=ArtikelAusgabe)
