@@ -60,17 +60,16 @@ def restmenge_berechnen(artikel: Einkaufsartikel) -> float | None:
 
 
 def status_berechnen(artikel: Einkaufsartikel) -> Einkaufsstatus:
-    if not positive_menge(artikel.menge):
-        return "gekauft" if artikel.gekauft_ohne_menge else "offen"
-    gekauft = artikel.gekaufte_menge
-    if gekauft == artikel.menge:
+    if artikel.gekauft:
         return "gekauft"
-    return "teilweise_gekauft" if gekauft > 0 else "offen"
+    if artikel.gekaufte_menge > 0:
+        return "teilweise_gekauft"
+    return "offen"
 
 
 def fortschritt_berechnen(artikel: list[Einkaufsartikel]) -> Fortschritt:
     gesamt = len(artikel)
-    gekauft = sum(1 for eintrag in artikel if status_berechnen(eintrag) == "gekauft")
+    gekauft = sum(1 for eintrag in artikel if eintrag.gekauft)
     prozent = round(gekauft / gesamt * 100, 1) if gesamt else 0
     return Fortschritt(gekauft=gekauft, gesamt=gesamt, prozent=prozent)
 
@@ -118,9 +117,8 @@ def artikel_hinzufuegen(
 def artikel_status_setzen(session: Session, artikel_id: int, gekauft: bool) -> Einkaufsartikel:
     with session.begin():
         artikel = artikel_finden(session, artikel_id)
-        menge_vorhanden = positive_menge(artikel.menge)
-        artikel.gekaufte_menge = artikel.menge if gekauft and menge_vorhanden else 0
-        artikel.gekauft_ohne_menge = gekauft and not menge_vorhanden
+        artikel.gekauft = gekauft
+        artikel.gekaufte_menge = (artikel.menge or 0) if gekauft else 0
     return artikel
 
 
@@ -135,6 +133,7 @@ def teileinkauf_erfassen(session: Session, artikel_id: int, zusaetzliche_menge: 
         if zusaetzliche_menge > restmenge_berechnen(artikel):
             raise UngueltigeDaten("Die zusätzlich gekaufte Menge darf die offene Restmenge nicht überschreiten.")
         artikel.gekaufte_menge = round(artikel.gekaufte_menge + zusaetzliche_menge, 3)
+        artikel.gekauft = artikel.gekaufte_menge >= artikel.menge
     return artikel
 
 
@@ -147,6 +146,7 @@ def gekaufte_menge_korrigieren(session: Session, artikel_id: int, menge: float) 
         if menge > artikel.menge:
             raise UngueltigeDaten("Die gekaufte Menge darf die geplante Menge nicht überschreiten.")
         artikel.gekaufte_menge = menge
+        artikel.gekauft = artikel.gekaufte_menge >= artikel.menge
     return artikel
 
 
@@ -176,9 +176,9 @@ def artikel_bearbeiten(
         elif status == "gekauft":
             # Beim Wechsel zwischen Mengenartikel und Checkbox ohne Menge
             # bleibt ein vollständig abgehakter Artikel vollständig gekauft.
-            menge_vorhanden = positive_menge(menge)
-            artikel.gekaufte_menge = menge if menge_vorhanden else 0
-            artikel.gekauft_ohne_menge = not menge_vorhanden
+            artikel.gekaufte_menge = menge or 0
+        if menge is not None:
+            artikel.gekauft = artikel.gekaufte_menge >= menge
         repository.artikel_bearbeiten(artikel, name, menge, einheit)
     return artikel
 
