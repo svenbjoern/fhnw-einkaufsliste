@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 from pydantic import BaseModel, ConfigDict, field_serializer
 
 from app.business import Einkaufsstatus
@@ -11,7 +9,7 @@ class ListeErstellen(BaseModel):
 
 class ArtikelErstellen(BaseModel):
     name: str
-    menge: Decimal | None = None
+    menge: float | None = None
     einheit: str | None = None
 
 
@@ -20,27 +18,27 @@ class ArtikelStatus(BaseModel):
 
 
 class TeileinkaufErfassen(BaseModel):
-    zusaetzliche_menge: Decimal
+    zusaetzliche_menge: float
 
 
 class GekaufteMengeKorrigieren(BaseModel):
-    gekaufte_menge: Decimal
+    gekaufte_menge: float
 
 
 class ArtikelAusgabe(BaseModel):
     id: int
     einkaufsliste_id: int
     name: str
-    menge: Decimal | None
+    menge: float | None
     einheit: str | None
     gekauft: bool
-    gekaufte_menge: Decimal | None
-    restmenge: Decimal | None
+    gekaufte_menge: float | None
+    restmenge: float | None
     status: Einkaufsstatus
 
     @field_serializer("menge", "gekaufte_menge", "restmenge", when_used="json")
-    def menge_als_text(self, wert: Decimal | None) -> str | None:
-        return format(wert, "f") if wert is not None else None
+    def menge_als_text(self, wert: float | None) -> str | None:
+        return str(wert) if wert is not None else None
 
 
 class Fortschritt(BaseModel):

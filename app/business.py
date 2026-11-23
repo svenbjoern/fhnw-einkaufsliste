@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from decimal import Decimal, localcontext
+from math import isfinite
 from typing import Literal
 
 from sqlalchemy.orm import Session
@@ -33,10 +33,10 @@ def name_validieren(name: str) -> str:
     return name
 
 
-def menge_validieren(menge: Decimal | None, *, null_zulaessig: bool = False) -> Decimal | None:
+def menge_validieren(menge: float | None, *, null_zulaessig: bool = False) -> float | None:
     if menge is None:
         return None
-    if not menge.is_finite() or menge < 0 or (menge == 0 and not null_zulaessig):
+    if not isfinite(menge) or menge < 0 or (menge == 0 and not null_zulaessig):
         grenze = "mindestens null" if null_zulaessig else "grösser als null"
         raise UngueltigeDaten(f"Die Menge muss eine endliche Zahl {grenze} sein.")
     # Nachgestellte Nullen ändern den Wert nicht (z. B. 1.500000).
@@ -45,40 +45,24 @@ def menge_validieren(menge: Decimal | None, *, null_zulaessig: bool = False) -> 
     return menge
 
 
-def hat_gueltige_praezision(menge: Decimal) -> bool:
-    _, ziffern, exponent = menge.as_tuple()
-    ueberzaehlige_stellen = max(0, -exponent - 3)
-    return not ueberzaehlige_stellen or not any(ziffern[-ueberzaehlige_stellen:])
+def hat_gueltige_praezision(menge: float) -> bool:
+    return round(menge, 3) == menge
 
 
-def geplante_menge_validieren(menge: Decimal | None) -> Decimal | None:
-    menge_validieren(menge)
-    if menge is not None:
-        numerisch = float(menge)
-        # SQLite legt ganzzahlige NUMERIC-Werte bis 2**63 als INTEGER ab.
-        gespeichert = int(numerisch) if numerisch < 2**63 and numerisch.is_integer() else numerisch
-        if Decimal(str(gespeichert)) != menge:
-            raise UngueltigeDaten("Die geplante Menge ist für die Datenbank zu gross oder zu genau.")
-    return menge
+def positive_menge(menge: float | None) -> bool:
+    return menge is not None and isfinite(menge) and menge > 0
 
 
-def positive_menge(menge: Decimal | None) -> bool:
-    return menge is not None and menge.is_finite() and menge > 0
-
-
-def restmenge_berechnen(artikel: Einkaufsartikel) -> Decimal | None:
+def restmenge_berechnen(artikel: Einkaufsartikel) -> float | None:
     if not positive_menge(artikel.menge):
         return None
-    with localcontext() as kontext:
-        # Auch grosse SQLite-Altwerte mit einem Einkauf von 0.001 bleiben exakt.
-        kontext.prec = max(28, artikel.menge.adjusted() + 4)
-        return artikel.menge - Decimal(artikel.gekaufte_menge)
+    return round(artikel.menge - artikel.gekaufte_menge, 3)
 
 
 def status_berechnen(artikel: Einkaufsartikel) -> Einkaufsstatus:
     if not positive_menge(artikel.menge):
         return "gekauft" if artikel.gekauft_ohne_menge else "offen"
-    gekauft = Decimal(artikel.gekaufte_menge)
+    gekauft = artikel.gekaufte_menge
     if gekauft == artikel.menge:
         return "gekauft"
     return "teilweise_gekauft" if gekauft > 0 else "offen"
@@ -121,12 +105,12 @@ def liste_loeschen(session: Session, liste_id: int) -> None:
 
 
 def artikel_hinzufuegen(
-    session: Session, liste_id: int, name: str, menge: Decimal | None, einheit: str | None,
+    session: Session, liste_id: int, name: str, menge: float | None, einheit: str | None,
 ) -> Einkaufsartikel:
     with session.begin():
         liste = liste_finden(session, liste_id)
         name = name_validieren(name)
-        menge = geplante_menge_validieren(menge)
+        menge = menge_validieren(menge)
         artikel = repository.artikel_erstellen(session, liste, name, menge, (einheit or "").strip() or None)
     return artikel
 
@@ -135,12 +119,12 @@ def artikel_status_setzen(session: Session, artikel_id: int, gekauft: bool) -> E
     with session.begin():
         artikel = artikel_finden(session, artikel_id)
         menge_vorhanden = positive_menge(artikel.menge)
-        artikel.gekaufte_menge = str(artikel.menge) if gekauft and menge_vorhanden else "0"
+        artikel.gekaufte_menge = artikel.menge if gekauft and menge_vorhanden else 0
         artikel.gekauft_ohne_menge = gekauft and not menge_vorhanden
     return artikel
 
 
-def teileinkauf_erfassen(session: Session, artikel_id: int, zusaetzliche_menge: Decimal) -> Einkaufsartikel:
+def teileinkauf_erfassen(session: Session, artikel_id: int, zusaetzliche_menge: float) -> Einkaufsartikel:
     with session.begin():
         artikel = artikel_finden(session, artikel_id)
         if not positive_menge(artikel.menge) or not hat_gueltige_praezision(artikel.menge):
@@ -150,13 +134,11 @@ def teileinkauf_erfassen(session: Session, artikel_id: int, zusaetzliche_menge: 
         menge_validieren(zusaetzliche_menge)
         if zusaetzliche_menge > restmenge_berechnen(artikel):
             raise UngueltigeDaten("Die zusätzlich gekaufte Menge darf die offene Restmenge nicht überschreiten.")
-        with localcontext() as kontext:
-            kontext.prec = max(28, artikel.menge.adjusted() + 4)
-            artikel.gekaufte_menge = str(Decimal(artikel.gekaufte_menge) + zusaetzliche_menge)
+        artikel.gekaufte_menge = round(artikel.gekaufte_menge + zusaetzliche_menge, 3)
     return artikel
 
 
-def gekaufte_menge_korrigieren(session: Session, artikel_id: int, menge: Decimal) -> Einkaufsartikel:
+def gekaufte_menge_korrigieren(session: Session, artikel_id: int, menge: float) -> Einkaufsartikel:
     with session.begin():
         artikel = artikel_finden(session, artikel_id)
         if not positive_menge(artikel.menge) or not hat_gueltige_praezision(artikel.menge):
@@ -164,7 +146,7 @@ def gekaufte_menge_korrigieren(session: Session, artikel_id: int, menge: Decimal
         menge_validieren(menge, null_zulaessig=True)
         if menge > artikel.menge:
             raise UngueltigeDaten("Die gekaufte Menge darf die geplante Menge nicht überschreiten.")
-        artikel.gekaufte_menge = str(menge) if menge else "0"
+        artikel.gekaufte_menge = menge
     return artikel
 
 
@@ -176,18 +158,18 @@ def artikel_finden(session: Session, artikel_id: int) -> Einkaufsartikel:
 
 
 def artikel_bearbeiten(
-    session: Session, artikel_id: int, name: str, menge: Decimal | None, einheit: str | None,
+    session: Session, artikel_id: int, name: str, menge: float | None, einheit: str | None,
 ) -> Einkaufsartikel:
     with session.begin():
         artikel = artikel_finden(session, artikel_id)
         name = name_validieren(name)
         if menge != artikel.menge:
-            geplante_menge_validieren(menge)
+            menge_validieren(menge)
         einheit = (einheit or "").strip() or None
         status = status_berechnen(artikel)
-        hat_einkaufsmenge = Decimal(artikel.gekaufte_menge) > 0
+        hat_einkaufsmenge = artikel.gekaufte_menge > 0
         if hat_einkaufsmenge and (menge is not None or status == "teilweise_gekauft"):
-            if menge is None or menge < Decimal(artikel.gekaufte_menge):
+            if menge is None or menge < artikel.gekaufte_menge:
                 raise UngueltigeDaten("Die geplante Menge muss mindestens der bereits gekauften Menge entsprechen.")
             if einheit != artikel.einheit:
                 raise UngueltigeDaten("Bei einer bereits gekauften Menge kann die Einheit nicht geändert werden.")
@@ -195,7 +177,7 @@ def artikel_bearbeiten(
             # Beim Wechsel zwischen Mengenartikel und Checkbox ohne Menge
             # bleibt ein vollständig abgehakter Artikel vollständig gekauft.
             menge_vorhanden = positive_menge(menge)
-            artikel.gekaufte_menge = str(menge) if menge_vorhanden else "0"
+            artikel.gekaufte_menge = menge if menge_vorhanden else 0
             artikel.gekauft_ohne_menge = not menge_vorhanden
         repository.artikel_bearbeiten(artikel, name, menge, einheit)
     return artikel

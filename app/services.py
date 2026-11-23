@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
@@ -20,7 +18,7 @@ def artikel_ausgeben(artikel: Einkaufsartikel) -> ArtikelAusgabe:
     return ArtikelAusgabe(
         id=artikel.id, einkaufsliste_id=artikel.einkaufsliste_id, name=artikel.name,
         menge=artikel.menge, einheit=artikel.einheit, gekauft=status == "gekauft",
-        gekaufte_menge=Decimal(artikel.gekaufte_menge) if restmenge is not None else None,
+        gekaufte_menge=artikel.gekaufte_menge if restmenge is not None else None,
         restmenge=restmenge, status=status,
     )
 

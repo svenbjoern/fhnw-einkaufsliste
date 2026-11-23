@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -32,11 +30,10 @@ def liste_loeschen(session: Session, liste: Einkaufsliste) -> None:
 
 def artikel_erstellen(
     session: Session, liste: Einkaufsliste, name: str,
-    menge: Decimal | None, einheit: str | None,
+    menge: float | None, einheit: str | None,
 ) -> Einkaufsartikel:
     artikel = Einkaufsartikel(
         einkaufsliste=liste, name=name, menge=menge, einheit=einheit,
-        gekauft_ohne_menge=False, gekaufte_menge="0",
     )
     session.add(artikel)
     return artikel
@@ -47,7 +44,7 @@ def artikel_finden(session: Session, artikel_id: int) -> Einkaufsartikel | None:
 
 
 def artikel_bearbeiten(
-    artikel: Einkaufsartikel, name: str, menge: Decimal | None, einheit: str | None,
+    artikel: Einkaufsartikel, name: str, menge: float | None, einheit: str | None,
 ) -> Einkaufsartikel:
     artikel.name = name
     artikel.menge = menge
