@@ -15,7 +15,7 @@ Im FHNW-Modul Webbasierte Anwendungen (HS2026) setzt die Projektgruppe eine einf
 
 Die HTML/CSS-Oberfläche verwendet JavaScript und `fetch()`. FastAPI nimmt JSON-Anfragen entgegen. Der Business Layer prüft und berechnet die Mengen, bestimmt den Status und schliesst Transaktionen ab. SQLAlchemy speichert Einkaufslisten und Einkaufsartikel in SQLite. Ein Artikel gehört genau einer Liste, eine Liste kann mehrere Artikel enthalten.
 
-Die [README mit dem aktuellen ER-Diagramm](../README.md#datenmodell) dokumentiert den umgesetzten Stand, das API und die Migration. [GUI-Mockup](GUI-Mockup.png) und [ursprüngliches ER-Modell](ER-Modell_Digitale_Einkaufsliste_konzeptionell.png) zeigen die frühe Entwurfsphase.
+Die [README mit dem aktuellen ER-Diagramm](../README.md#datenmodell) dokumentiert die Anwendung und ihre API. [GUI-Mockup](GUI-Mockup.png) und [ursprüngliches ER-Modell](ER-Modell_Digitale_Einkaufsliste_konzeptionell.png) zeigen die frühe Entwurfsphase.
 
 ## Abgabe und Verteidigung
 
