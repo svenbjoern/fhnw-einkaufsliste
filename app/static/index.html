@@ -1,49 +1,89 @@
 <!doctype html>
-<html lang="de">
+<html lang="de-CH" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Digitale Einkaufsliste</title>
-  <link rel="stylesheet" href="/static/style.css">
-  <script src="/static/app.js" defer></script>
+  <script>
+    try {
+      if (localStorage.getItem("einkaufsliste.theme") === "dark") {
+        document.documentElement.dataset.theme = "dark";
+      }
+    } catch {
+      // Die Seite bleibt auch ohne Zugriff auf den Browser-Speicher bedienbar.
+    }
+  </script>
+  <link rel="stylesheet" href="/static/style.css?v=4">
+  <script src="/static/app.js?v=4" defer></script>
 </head>
 <body>
-  <header><div class="container"><span class="brand">Digitale Einkaufsliste</span><p>Gemeinsam planen. Einfach einkaufen.</p></div></header>
+  <header class="kopf">
+    <div class="container kopf-inhalt">
+      <span class="brand">
+        <span class="brand-symbol">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 10h18l-2 9H5zM7 10l3-5m7 5-3-5m-5 9 .5 2m5.5-2-.5 2"/>
+          </svg>
+        </span>
+        Digitale Einkaufsliste
+      </span>
+      <button id="theme-schalter" type="button" class="symbol-button theme-schalter" aria-label="Dunkles Farbschema" aria-pressed="false">
+        <svg class="theme-sonne" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2.5v2m0 15v2M2.5 12h2m15 0h2M5.3 5.3l1.4 1.4m10.6 10.6 1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>
+        </svg>
+        <svg class="theme-mond" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.8 14.1A9 9 0 0 1 9.9 3.2a9 9 0 1 0 10.9 10.9Z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
   <main class="container">
     <p id="meldung" role="alert" hidden></p>
-    <div class="layout">
-      <section class="panel" aria-labelledby="listen-titel">
-        <h1 id="listen-titel">Meine Einkaufslisten</h1>
-        <form id="listen-form">
-          <label for="listen-name">Neue Einkaufsliste</label>
-          <div class="form-row">
+    <div class="layout" id="layout">
+      <section class="listen-uebersicht" aria-labelledby="listen-titel">
+        <div class="uebersicht-kopf">
+          <h1 id="listen-titel" tabindex="-1">Meine Einkaufslisten</h1>
+          <form id="listen-form" class="listen-form">
+            <label for="listen-name" class="visuell-ausgeblendet">Name der neuen Einkaufsliste</label>
             <input id="listen-name" name="name" placeholder="z. B. Migros" required>
-            <button type="submit">Erstellen</button>
-          </div>
-        </form>
+            <button type="submit">Neue Liste</button>
+          </form>
+        </div>
         <p id="keine-listen" hidden>Noch keine Listen. Erstelle deine erste Einkaufsliste.</p>
         <ul id="listen" class="listen"></ul>
       </section>
-      <section class="panel" aria-labelledby="detail-titel">
-        <h2 id="detail-titel">Dein Einkauf</h2>
-        <p id="auswahl-hinweis">Wähle eine Einkaufsliste aus.</p>
-        <div id="listen-detail" hidden>
-          <p id="fortschritt-text" aria-live="polite"></p>
+      <section class="panel listen-detail" id="listen-detail" aria-labelledby="detail-titel" hidden>
+        <button id="zur-uebersicht" type="button" class="sekundaer">Alle Listen</button>
+        <div class="detail-kopf">
+          <h2 id="detail-titel" tabindex="-1"></h2>
+          <div class="fortschritt-zeile">
+            <p id="fortschritt-text" aria-live="polite"></p>
+            <span id="fortschritt-prozent" aria-hidden="true"></span>
+          </div>
           <progress id="fortschritt" max="100" value="0" aria-label="Einkaufsfortschritt"></progress>
-          <form id="artikel-form" class="artikel-form">
-            <h3>Artikel hinzufügen</h3>
-            <label for="artikel-name">Artikelname</label>
-            <input id="artikel-name" name="name" placeholder="z. B. Milch" required>
-            <div class="form-row">
-              <div><label for="menge">Menge (optional)</label><input id="menge" name="menge" type="number" step="any" placeholder="z. B. 2"></div>
-              <div><label for="einheit">Einheit (optional)</label><input id="einheit" name="einheit" placeholder="z. B. Liter"></div>
-            </div>
-            <button type="submit">Hinzufügen</button>
-          </form>
-          <h3>Artikel</h3>
-          <p id="keine-artikel" hidden>Diese Liste ist noch leer.</p>
-          <ul id="artikel" class="artikel"></ul>
         </div>
+        <form id="artikel-form" class="artikel-form">
+          <h3>Artikel hinzufügen</h3>
+          <div class="artikel-felder">
+            <div class="artikel-name-feld">
+              <label for="artikel-name">Artikelname</label>
+              <input id="artikel-name" name="name" placeholder="z. B. Milch" required>
+            </div>
+            <div>
+              <label for="menge">Geplante Menge <span class="optional">(optional)</span></label>
+              <input id="menge" name="menge" type="number" step="any" placeholder="z. B. 2">
+            </div>
+            <div>
+              <label for="einheit">Einheit <span class="optional">(optional)</span></label>
+              <input id="einheit" name="einheit" placeholder="z. B. Liter">
+            </div>
+          </div>
+          <button type="submit">Hinzufügen</button>
+        </form>
+        <h3>Artikel</h3>
+        <p id="keine-artikel" hidden>Diese Liste ist noch leer.</p>
+        <ul id="artikel" class="artikel"></ul>
       </section>
     </div>
   </main>
@@ -55,11 +95,36 @@
         <label for="bearbeiten-name">Artikelname</label>
         <input id="bearbeiten-name" name="name" required autofocus>
         <div class="form-row">
-          <div><label for="bearbeiten-menge">Menge (optional)</label><input id="bearbeiten-menge" name="menge" type="number" step="any"></div>
+          <div><label for="bearbeiten-menge">Geplante Menge (optional)</label><input id="bearbeiten-menge" name="menge" type="number" step="any"></div>
           <div><label for="bearbeiten-einheit">Einheit (optional)</label><input id="bearbeiten-einheit" name="einheit"></div>
+        </div>
+        <p id="bearbeiten-teilhinweis" class="dialog-hinweis" aria-live="polite"></p>
+        <div class="mengen-aktionen">
+          <button id="bearbeiten-teileinkauf" type="button" class="sekundaer">Teileinkauf erfassen</button>
+          <button id="bearbeiten-korrigieren" type="button" class="sekundaer" hidden>Gekaufte Menge korrigieren</button>
         </div>
         <div class="dialog-aktionen">
           <button id="bearbeiten-abbrechen" type="button" class="sekundaer">Abbrechen</button>
+          <button type="submit">Speichern</button>
+        </div>
+      </fieldset>
+    </form>
+  </dialog>
+  <dialog id="teileinkauf-dialog" aria-labelledby="teileinkauf-titel">
+    <form id="teileinkauf-form">
+      <fieldset id="teileinkauf-felder">
+        <h2 id="teileinkauf-titel">Teileinkauf erfassen</h2>
+        <p id="teileinkauf-artikel" class="teileinkauf-artikel"></p>
+        <dl class="teileinkauf-mengen">
+          <dt>Geplante Gesamtmenge</dt><dd id="teileinkauf-geplant"></dd>
+          <dt>Bereits gekauft</dt><dd id="teileinkauf-gekauft"></dd>
+        </dl>
+        <p id="teileinkauf-fehler" class="fehlermeldung" role="alert" hidden></p>
+        <label id="teileinkauf-menge-label" for="teileinkauf-menge">Jetzt zusätzlich gekauft</label>
+        <input id="teileinkauf-menge" inputmode="decimal" required autofocus>
+        <p>Danach offen <output id="teileinkauf-rest" for="teileinkauf-menge"></output></p>
+        <div class="dialog-aktionen">
+          <button id="teileinkauf-abbrechen" type="button" class="sekundaer">Abbrechen</button>
           <button type="submit">Speichern</button>
         </div>
       </fieldset>

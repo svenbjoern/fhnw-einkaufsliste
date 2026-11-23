@@ -1,18 +1,58 @@
 const listenElement = document.querySelector("#listen");
 const artikelElement = document.querySelector("#artikel");
+const layout = document.querySelector("#layout");
+const detailTitel = document.querySelector("#detail-titel");
+const themeSchalter = document.querySelector("#theme-schalter");
 const meldung = document.querySelector("#meldung");
 const bearbeitenDialog = document.querySelector("#bearbeiten-dialog");
 const bearbeitenForm = document.querySelector("#bearbeiten-form");
 const bearbeitenFelder = document.querySelector("#bearbeiten-felder");
 const bearbeitenFehler = document.querySelector("#bearbeiten-fehler");
+const bearbeitenTeilhinweis = document.querySelector("#bearbeiten-teilhinweis");
+const bearbeitenTeileinkauf = document.querySelector("#bearbeiten-teileinkauf");
+const bearbeitenKorrigieren = document.querySelector("#bearbeiten-korrigieren");
+const teileinkaufDialog = document.querySelector("#teileinkauf-dialog");
+const teileinkaufForm = document.querySelector("#teileinkauf-form");
+const teileinkaufFelder = document.querySelector("#teileinkauf-felder");
+const teileinkaufMenge = document.querySelector("#teileinkauf-menge");
+const teileinkaufFehler = document.querySelector("#teileinkauf-fehler");
+const teileinkaufRest = document.querySelector("#teileinkauf-rest");
 const listeDialog = document.querySelector("#liste-bearbeiten-dialog");
 const listeForm = document.querySelector("#liste-bearbeiten-form");
 const listeFelder = document.querySelector("#liste-bearbeiten-felder");
 const listeFehler = document.querySelector("#liste-bearbeiten-fehler");
 let bearbeiteteListe = null;
 let bearbeiteterArtikel = null;
+let teileinkaufArtikel = null;
+let gekaufteMengeKorrigieren = false;
 let ausgewaehlteListe = null;
 let listen = [];
+
+function themeSchalterAktualisieren() {
+  const dunkel = document.documentElement.dataset.theme === "dark";
+  themeSchalter.setAttribute("aria-pressed", String(dunkel));
+  themeSchalter.title = dunkel ? "Zum Light Mode wechseln" : "Zum Dark Mode wechseln";
+}
+
+themeSchalterAktualisieren();
+themeSchalter.addEventListener("click", () => {
+  const html = document.documentElement;
+  const theme = html.dataset.theme === "dark" ? "light" : "dark";
+  html.dataset.theme = theme;
+  themeSchalterAktualisieren();
+  try {
+    localStorage.setItem("einkaufsliste.theme", theme);
+  } catch {
+    // Der Wechsel funktioniert auch für die aktuelle Seite ohne Browser-Speicher.
+  }
+});
+
+document.querySelector("#zur-uebersicht").addEventListener("click", () => {
+  ausgewaehlteListe = null;
+  listenAnzeigen();
+  detailsAnzeigen();
+  document.querySelector("#listen-titel").focus();
+});
 
 async function api(pfad, methode = "GET", daten) {
   const antwort = await fetch(`/api${pfad}`, {
@@ -21,8 +61,8 @@ async function api(pfad, methode = "GET", daten) {
     body: daten === undefined ? undefined : JSON.stringify(daten),
   });
   if (!antwort.ok) {
-    const fehler = await antwort.json();
-    throw new Error(fehler.detail || "Die Anfrage ist fehlgeschlagen.");
+    const fehler = await antwort.json().catch(() => null);
+    throw new Error(fehler?.detail || "Die Anfrage ist fehlgeschlagen.");
   }
   return antwort.status === 204 ? null : antwort.json();
 }
@@ -36,15 +76,48 @@ function fehlerAnzeigen(fehler) {
 
 function fortschrittText(liste) {
   const f = liste.fortschritt;
-  return `${f.gekauft} / ${f.gesamt} gekauft (${f.prozent.toLocaleString("de-CH")} %)`;
+  return `${f.gekauft} von ${f.gesamt} gekauft`;
 }
 
 function mengeFormatieren(menge) {
   if (menge === null) return "";
+  if (mengeInTausendsteln(menge) !== null) return menge.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
   // Nur die Anzeige wird gerundet; gespeicherte Altwerte bleiben unverändert.
   return Number(menge).toLocaleString("en-US", {
     useGrouping: false, maximumFractionDigits: 3,
   });
+}
+
+function mengeInTausendsteln(text) {
+  const teile = text?.trim().replace(",", ".").match(/^(\d*)(?:\.(\d*))?$/);
+  if (!teile) return null;
+  const [, ganze, nachkomma = ""] = teile;
+  if ((!ganze && !nachkomma) || /[1-9]/.test(nachkomma.slice(3))) return null;
+  return BigInt(ganze + nachkomma.slice(0, 3).padEnd(3, "0"));
+}
+
+function tausendstelFormatieren(menge) {
+  const ganz = menge / 1000n;
+  const dezimal = String(menge % 1000n).padStart(3, "0").replace(/0+$/, "");
+  return dezimal ? `${ganz}.${dezimal}` : String(ganz);
+}
+
+function mitEinheit(menge, einheit) {
+  return einheit ? `${menge} ${einheit}` : menge;
+}
+
+function teileinkaufMoeglich(artikel) {
+  return !artikel.gekauft && (mengeInTausendsteln(artikel.restmenge) ?? 0n) > 0n;
+}
+
+function teileinkaufSperrgrund(artikel) {
+  if (artikel.gekauft) return "Dieser Artikel ist bereits vollständig gekauft.";
+  return "Speichere zuerst eine positive geplante Menge mit maximal drei Nachkommastellen.";
+}
+
+function mengenkorrekturMoeglich(artikel) {
+  return (mengeInTausendsteln(artikel.menge) ?? 0n) > 0n
+    && (mengeInTausendsteln(artikel.gekaufte_menge) ?? 0n) > 0n;
 }
 
 function mengePruefen(feld) {
@@ -75,12 +148,17 @@ function listenAnzeigen() {
     name.textContent = liste.name;
     const fortschritt = document.createElement("small");
     fortschritt.textContent = fortschrittText(liste);
-    button.append(name, fortschritt);
+    const balken = document.createElement("progress");
+    balken.max = 100;
+    balken.value = liste.fortschritt.prozent;
+    balken.setAttribute("aria-hidden", "true");
+    button.append(name, fortschritt, balken);
     button.addEventListener("click", () => {
       ausgewaehlteListe = liste.id;
       document.querySelector("#artikel-form").reset();
       listenAnzeigen();
       detailsAnzeigen();
+      detailTitel.focus();
     });
     // Die Aktionsbuttons sind Geschwister der Auswahl, keine verschachtelten Buttons.
     const aktionen = document.createElement("div");
@@ -123,14 +201,15 @@ function listenAnzeigen() {
 
 function detailsAnzeigen() {
   const liste = listen.find((eintrag) => eintrag.id === ausgewaehlteListe);
-  document.querySelector("#auswahl-hinweis").hidden = Boolean(liste);
+  layout.classList.toggle("hat-auswahl", Boolean(liste));
   document.querySelector("#listen-detail").hidden = !liste;
-  document.querySelector("#detail-titel").textContent = liste ? liste.name : "Dein Einkauf";
+  detailTitel.textContent = liste?.name ?? "";
   if (!liste) {
     artikelElement.replaceChildren();
     return;
   }
   document.querySelector("#fortschritt-text").textContent = fortschrittText(liste);
+  document.querySelector("#fortschritt-prozent").textContent = `${liste.fortschritt.prozent.toLocaleString("de-CH")} %`;
   document.querySelector("#fortschritt").value = liste.fortschritt.prozent;
   document.querySelector("#keine-artikel").hidden = liste.artikel.length > 0;
   artikelElement.replaceChildren();
@@ -141,15 +220,32 @@ function detailsAnzeigen() {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = artikel.gekauft;
+    checkbox.indeterminate = artikel.status === "teilweise_gekauft";
+    const info = document.createElement("div");
+    info.className = "artikel-info";
     const beschreibung = document.createElement("span");
     const name = document.createElement("span");
     name.className = "artikel-name";
     name.textContent = artikel.name;
     const zusatz = document.createElement("small");
-    const menge = mengeFormatieren(artikel.menge);
-    zusatz.textContent = [menge, artikel.einheit, artikel.gekauft ? "Gekauft" : "Offen"].filter(Boolean).join(" · ");
+    zusatz.textContent = artikel.status === "teilweise_gekauft"
+      ? `Teilweise gekauft · ${mengeFormatieren(artikel.gekaufte_menge)} von ${mitEinheit(mengeFormatieren(artikel.menge), artikel.einheit)} gekauft · ${mitEinheit(mengeFormatieren(artikel.restmenge), artikel.einheit)} offen`
+      : [mengeFormatieren(artikel.menge), artikel.einheit, artikel.gekauft ? "Gekauft" : "Offen"].filter(Boolean).join(" · ");
     beschreibung.append(name, zusatz);
     label.append(checkbox, beschreibung);
+    info.append(label);
+    const mengenAktionen = document.createElement("div");
+    mengenAktionen.className = "mengen-aktionen";
+    const teileinkauf = mengenButton("Teileinkauf erfassen", artikel);
+    if (!teileinkaufMoeglich(artikel)) {
+      teileinkauf.disabled = true;
+      teileinkauf.title = teileinkaufSperrgrund(artikel);
+    }
+    mengenAktionen.append(teileinkauf);
+    if (artikel.status === "teilweise_gekauft" && mengenkorrekturMoeglich(artikel)) {
+      mengenAktionen.append(mengenButton("Gekaufte Menge korrigieren", artikel, true));
+    }
+    info.append(mengenAktionen);
     const aktionen = document.createElement("div");
     aktionen.className = "artikel-aktionen";
     const bearbeiten = symbolButton("Bearbeiten", artikel.name, "M16 3l5 5-12 12-6 1 1-6z M14 5l5 5");
@@ -174,7 +270,7 @@ function detailsAnzeigen() {
       }
     });
     aktionen.append(bearbeiten, loeschen);
-    li.append(label, aktionen);
+    li.append(info, aktionen);
     artikelElement.append(li);
     checkbox.addEventListener("change", async () => {
       checkbox.disabled = true;
@@ -184,12 +280,23 @@ function detailsAnzeigen() {
         await laden();
       } catch (fehler) {
         checkbox.checked = artikel.gekauft;
+        checkbox.indeterminate = artikel.status === "teilweise_gekauft";
         fehlerAnzeigen(fehler);
       } finally {
         checkbox.disabled = false;
       }
     });
   }
+}
+
+function mengenButton(text, artikel, korrigieren = false) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "sekundaer teileinkauf-button";
+  button.textContent = text;
+  button.setAttribute("aria-label", `${text}: ${artikel.name}`);
+  button.addEventListener("click", () => teileinkaufOeffnen(artikel, korrigieren));
+  return button;
 }
 
 async function laden() {
@@ -220,15 +327,44 @@ function symbolButton(aktion, artikelname, pfad) {
 }
 
 function bearbeitenOeffnen(artikel) {
-  bearbeiteterArtikel = artikel.id;
+  bearbeiteterArtikel = artikel;
   bearbeitenForm.elements.name.value = artikel.name;
   bearbeitenForm.elements.menge.value = mengeFormatieren(artikel.menge);
   bearbeitenForm.elements.menge.setCustomValidity("");
   bearbeitenForm.elements.einheit.value = artikel.einheit ?? "";
   bearbeitenFehler.hidden = true;
+  bearbeitenTeileinkauf.disabled = !teileinkaufMoeglich(artikel);
+  bearbeitenKorrigieren.hidden = !mengenkorrekturMoeglich(artikel);
+  bearbeitenKorrigieren.disabled = false;
+  bearbeitenTeilhinweis.textContent = mengendialogHinweis();
   bearbeitenDialog.showModal();
 }
 
+function mengendialogHinweis() {
+  if (!bearbeitenKorrigieren.hidden) return "Über «Gekaufte Menge korrigieren» änderst du die bisher gekaufte Menge.";
+  if (teileinkaufMoeglich(bearbeiteterArtikel)) return "Einen Einkauf erfasst du über «Teileinkauf erfassen».";
+  return teileinkaufSperrgrund(bearbeiteterArtikel);
+}
+
+bearbeitenForm.addEventListener("input", () => {
+  const artikel = bearbeiteterArtikel;
+  const felder = bearbeitenForm.elements;
+  const geaendert = felder.name.value !== artikel.name
+    || felder.menge.value !== mengeFormatieren(artikel.menge)
+    || felder.einheit.value !== (artikel.einheit ?? "");
+  bearbeitenTeileinkauf.disabled = geaendert || !teileinkaufMoeglich(artikel);
+  bearbeitenKorrigieren.disabled = geaendert;
+  bearbeitenTeilhinweis.textContent = geaendert
+    ? "Speichere zuerst deine Änderungen. Danach kannst du die gekaufte Menge erfassen oder korrigieren."
+    : mengendialogHinweis();
+});
+for (const button of [bearbeitenTeileinkauf, bearbeitenKorrigieren]) {
+  button.addEventListener("click", () => {
+    const artikel = bearbeiteterArtikel;
+    bearbeitenDialog.close();
+    teileinkaufOeffnen(artikel, button === bearbeitenKorrigieren);
+  });
+}
 document.querySelector("#bearbeiten-abbrechen").addEventListener("click", () => bearbeitenDialog.close());
 bearbeitenDialog.addEventListener("cancel", (event) => {
   // Während des Speicherns bleibt das Formular offen, bis die Antwort vorliegt.
@@ -246,9 +382,10 @@ bearbeitenForm.addEventListener("submit", async (event) => {
   meldung.hidden = true;
   try {
     // PUT ersetzt nur die drei bearbeitbaren Felder; der Status wird nicht gesendet.
-    await api(`/artikel/${bearbeiteterArtikel}`, "PUT", {
+    const menge = bearbeitenForm.elements.menge.value;
+    await api(`/artikel/${bearbeiteterArtikel.id}`, "PUT", {
       name: bearbeitenForm.elements.name.value,
-      menge: bearbeitenForm.elements.menge.value || null,
+      menge: menge === mengeFormatieren(bearbeiteterArtikel.menge) ? bearbeiteterArtikel.menge : menge || null,
       einheit: bearbeitenForm.elements.einheit.value || null,
     });
   } catch (fehler) {
@@ -259,6 +396,75 @@ bearbeitenForm.addEventListener("submit", async (event) => {
     bearbeitenFelder.disabled = false;
   }
   bearbeitenDialog.close();
+  try {
+    await laden();
+  } catch (fehler) {
+    fehlerAnzeigen(fehler);
+  }
+});
+
+function teileinkaufOeffnen(artikel, korrigieren = false) {
+  teileinkaufArtikel = artikel;
+  gekaufteMengeKorrigieren = korrigieren;
+  document.querySelector("#teileinkauf-titel").textContent = korrigieren ? "Gekaufte Menge korrigieren" : "Teileinkauf erfassen";
+  document.querySelector("#teileinkauf-menge-label").textContent = korrigieren ? "Neue gekaufte Gesamtmenge" : "Jetzt zusätzlich gekauft";
+  document.querySelector("#teileinkauf-artikel").textContent = artikel.name;
+  document.querySelector("#teileinkauf-geplant").textContent = mitEinheit(mengeFormatieren(artikel.menge), artikel.einheit);
+  document.querySelector("#teileinkauf-gekauft").textContent = mitEinheit(mengeFormatieren(artikel.gekaufte_menge), artikel.einheit);
+  teileinkaufForm.reset();
+  if (korrigieren) teileinkaufMenge.value = mengeFormatieren(artikel.gekaufte_menge);
+  teileinkaufFehler.hidden = true;
+  teileinkaufVorschau();
+  teileinkaufDialog.showModal();
+}
+
+function teileinkaufVorschau() {
+  const korrektur = gekaufteMengeKorrigieren;
+  const obergrenze = mengeInTausendsteln(korrektur ? teileinkaufArtikel.menge : teileinkaufArtikel.restmenge);
+  const eingabe = teileinkaufMenge.value.trim();
+  const menge = eingabe ? mengeInTausendsteln(eingabe) : 0n;
+  let fehler = "";
+  if (teileinkaufMenge.value && (!eingabe || menge === null || (!korrektur && menge === 0n))) {
+    fehler = korrektur
+      ? "Gib eine Menge ab null mit maximal drei Nachkommastellen ein."
+      : "Gib eine positive Menge mit maximal drei Nachkommastellen ein.";
+  } else if (menge > obergrenze) {
+    fehler = korrektur
+      ? "Die gekaufte Menge darf die geplante Menge nicht überschreiten."
+      : "Die zusätzliche Menge darf die offene Restmenge nicht überschreiten.";
+  }
+  teileinkaufMenge.setCustomValidity(fehler);
+  teileinkaufRest.textContent = fehler || (korrektur && !eingabe)
+    ? "–"
+    : mitEinheit(tausendstelFormatieren(obergrenze - menge), teileinkaufArtikel.einheit);
+}
+
+teileinkaufMenge.addEventListener("input", teileinkaufVorschau);
+document.querySelector("#teileinkauf-abbrechen").addEventListener("click", () => teileinkaufDialog.close());
+teileinkaufDialog.addEventListener("cancel", (event) => {
+  if (teileinkaufFelder.disabled) event.preventDefault();
+});
+teileinkaufForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  teileinkaufFelder.disabled = true;
+  teileinkaufFehler.hidden = true;
+  meldung.hidden = true;
+  try {
+    const artikelPfad = `/artikel/${teileinkaufArtikel.id}`;
+    const menge = teileinkaufMenge.value.trim().replace(",", ".");
+    if (gekaufteMengeKorrigieren) {
+      await api(`${artikelPfad}/gekaufte-menge`, "PATCH", { gekaufte_menge: menge });
+    } else {
+      await api(`${artikelPfad}/teileinkauf`, "POST", { zusaetzliche_menge: menge });
+    }
+  } catch (fehler) {
+    teileinkaufFehler.textContent = fehler.message;
+    teileinkaufFehler.hidden = false;
+    return;
+  } finally {
+    teileinkaufFelder.disabled = false;
+  }
+  teileinkaufDialog.close();
   try {
     await laden();
   } catch (fehler) {
@@ -307,8 +513,10 @@ document.querySelector("#listen-form").addEventListener("submit", async (event) 
   try {
     const liste = await api("/listen", "POST", { name: form.elements.name.value });
     ausgewaehlteListe = liste.id;
+    document.querySelector("#artikel-form").reset();
     form.reset();
     await laden();
+    detailTitel.focus();
   } catch (fehler) {
     fehlerAnzeigen(fehler);
   } finally {

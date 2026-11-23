@@ -1,11 +1,13 @@
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import main
+from app import business, main
 from app.database import Base, get_session
 from app.models import Einkaufsartikel, Einkaufsliste
 
@@ -21,7 +23,7 @@ def client(tmp_path, monkeypatch):
         connection.execute("PRAGMA foreign_keys=ON")
 
     def test_session():
-        with Session(engine) as session:
+        with Session(engine, expire_on_commit=False) as session:
             yield session
 
     monkeypatch.setattr(main, "engine", engine)
@@ -36,8 +38,12 @@ def client(tmp_path, monkeypatch):
 
 def test_end_to_end(client):
     api, engine = client
-    assert api.get("/").status_code == 200
-    assert api.get("/static/app.js").status_code == 200
+    startseite = api.get("/")
+    assert startseite.status_code == 200
+    assert startseite.headers["cache-control"] == "no-cache"
+    script = api.get("/static/app.js")
+    assert script.status_code == 200
+    assert script.headers["cache-control"] == "no-cache"
     assert api.get("/docs").status_code == 200
     assert api.get("/api/listen").json() == []
     response = api.post("/api/listen", json={"name": "  Migros "})
@@ -101,7 +107,8 @@ def test_artikel_bearbeiten(client, gekauft):
         assert gespeichert.name == "Hafermilch"
         assert float(gespeichert.menge) == 2.5
         assert gespeichert.einheit == "Liter"
-        assert gespeichert.gekauft is gekauft
+        assert gespeichert.gekauft_ohne_menge is False
+        assert Decimal(gespeichert.gekaufte_menge) == (Decimal("2.5") if gekauft else 0)
         assert gespeichert.einkaufsliste_id == liste["id"]
 
     response = api.put(pfad, json={"name": "Brot", "menge": None, "einheit": "  "})
@@ -253,3 +260,219 @@ def test_bestehende_mengen_bleiben_lesbar_und_unveraendert(client):
     assert api.patch(f"/api/artikel/{artikel_id}/status", json={"gekauft": True}).status_code == 200
     with Session(engine) as session:
         assert session.get(Einkaufsartikel, artikel_id).menge == Decimal("1.23456")
+
+
+def teileinkauf_anlegen(api, menge=None):
+    liste = api.post("/api/listen", json={"name": "Migros"}).json()
+    listen_pfad = f"/api/listen/{liste['id']}"
+    response = api.post(f"{listen_pfad}/artikel", json={"name": "Kartoffeln", "menge": menge, "einheit": "kg"})
+    assert response.status_code == 201
+    return listen_pfad, f"/api/artikel/{response.json()['id']}"
+
+
+def test_teileinkauf_bis_zum_vollstaendigen_einkauf(client):
+    api, _ = client
+    liste, artikel = teileinkauf_anlegen(api, "3")
+    zweite_liste = api.post("/api/listen", json={"name": "Aldi"}).json()
+    assert api.get(liste).json()["artikel"][0]["status"] == "offen"
+
+    for zusatz, gekauft, rest, status in [
+        ("2", "2", "1", "teilweise_gekauft"),
+        ("1", "3", "0", "gekauft"),
+    ]:
+        response = api.post(f"{artikel}/teileinkauf", json={"zusaetzliche_menge": zusatz})
+        assert response.status_code == 200
+        daten = response.json()
+        assert Decimal(daten["menge"]) == 3 and daten["einheit"] == "kg"
+        assert Decimal(daten["gekaufte_menge"]) == Decimal(gekauft)
+        assert Decimal(daten["restmenge"]) == Decimal(rest)
+        assert daten["status"] == status
+        assert daten["gekauft"] is (status == "gekauft")
+        gespeichert = api.get(liste).json()
+        assert gespeichert["artikel"] == [daten]
+        assert gespeichert["fortschritt"]["gekauft"] == int(daten["gekauft"])
+        assert api.get(f"/api/listen/{zweite_liste['id']}").json()["artikel"] == []
+
+    assert api.post(f"{artikel}/teileinkauf", json={"zusaetzliche_menge": "1"}).status_code == 422
+    assert api.get(liste).json()["artikel"] == [daten]
+
+
+def test_dezimaler_teileinkauf_und_checkbox(client):
+    api, _ = client
+    liste, artikel = teileinkauf_anlegen(api, "0.301")
+    for menge in ("0.1000", "0.2"):
+        assert api.post(f"{artikel}/teileinkauf", json={"zusaetzliche_menge": menge}).status_code == 200
+    assert Decimal(api.get(liste).json()["artikel"][0]["restmenge"]) == Decimal("0.001")
+    for wert, gekauft, rest in [(True, "0.301", "0"), (False, "0", "0.301")]:
+        daten = api.patch(f"{artikel}/status", json={"gekauft": wert}).json()
+        assert daten["gekauft"] is wert
+        assert Decimal(daten["gekaufte_menge"]) == Decimal(gekauft)
+        assert Decimal(daten["restmenge"]) == Decimal(rest)
+
+
+def test_teileinkauf_behaelt_tausendstel_bei_grosser_geplanter_menge(client):
+    api, _ = client
+    liste, artikel = teileinkauf_anlegen(api, "1000000000000000000000000000000")
+    assert api.post(f"{artikel}/teileinkauf", json={"zusaetzliche_menge": "0.001"}).status_code == 200
+    daten = api.get(liste).json()["artikel"][0]
+    assert Decimal(daten["gekaufte_menge"]) == Decimal("0.001")
+    assert daten["restmenge"] == "999999999999999999999999999999.999"
+    assert daten["status"] == "teilweise_gekauft"
+    assert api.put(artikel, json={"name": "Kartoffeln", "menge": "1e400", "einheit": "kg"}).status_code == 422
+    assert api.get(liste).json()["artikel"] == [daten]
+
+
+@pytest.mark.parametrize("menge", ["-1", "0", "abc", "0.0001", "1.001", "NaN", None])
+def test_ungueltiger_teileinkauf_aendert_nichts(client, menge):
+    api, _ = client
+    liste, artikel = teileinkauf_anlegen(api, "3")
+    assert api.post(f"{artikel}/teileinkauf", json={"zusaetzliche_menge": "2"}).status_code == 200
+    vorher = api.get(liste).json()
+    response = api.post(f"{artikel}/teileinkauf", json={"zusaetzliche_menge": menge})
+    assert response.status_code == 422
+    assert isinstance(response.json()["detail"], str)
+    assert api.get(liste).json() == vorher
+
+
+def test_kein_teileinkauf_ohne_menge_und_checkbox_funktioniert(client):
+    api, _ = client
+    _, artikel = teileinkauf_anlegen(api)
+    assert api.post(f"{artikel}/teileinkauf", json={"zusaetzliche_menge": "1"}).status_code == 422
+    assert api.post("/api/artikel/999/teileinkauf", json={"zusaetzliche_menge": "1"}).status_code == 404
+    for wert, status in [(True, "gekauft"), (False, "offen")]:
+        daten = api.patch(f"{artikel}/status", json={"gekauft": wert}).json()
+        assert daten["status"] == status
+        assert daten["gekaufte_menge"] is None and daten["restmenge"] is None
+
+
+def test_bearbeiten_behaelt_teileinkauf(client):
+    api, _ = client
+    liste, artikel = teileinkauf_anlegen(api, "3")
+    api.post(f"{artikel}/teileinkauf", json={"zusaetzliche_menge": "2"})
+
+    response = api.put(artikel, json={"name": "Festkochende Kartoffeln", "menge": "4", "einheit": "kg"})
+    assert response.status_code == 200
+    daten = response.json()
+    assert Decimal(daten["gekaufte_menge"]) == Decimal(daten["restmenge"]) == 2
+    assert daten["status"] == "teilweise_gekauft"
+    for menge, einheit in [("1", "kg"), (None, "kg"), ("4", "g")]:
+        assert api.put(artikel, json={"name": "Anderer Name", "menge": menge, "einheit": einheit}).status_code == 422
+        assert api.get(liste).json()["artikel"] == [daten]
+    response = api.put(artikel, json={"name": daten["name"], "menge": "2", "einheit": "kg"})
+    assert response.json()["status"] == "gekauft"
+    response = api.put(artikel, json={"name": daten["name"], "menge": "3", "einheit": "kg"})
+    assert response.json()["status"] == "teilweise_gekauft"
+    assert Decimal(response.json()["gekaufte_menge"]) == 2
+
+
+def test_gekaufte_menge_korrigieren_ersetzt_statt_zu_addieren(client):
+    api, _ = client
+    liste, artikel = teileinkauf_anlegen(api, "3")
+    assert api.post(f"{artikel}/teileinkauf", json={"zusaetzliche_menge": "2"}).status_code == 200
+    korrektur = f"{artikel}/gekaufte-menge"
+    vorher = api.get(liste).json()
+    for ungueltig in ("-1", "3.001", "1.5001", "abc", None):
+        assert api.patch(korrektur, json={"gekaufte_menge": ungueltig}).status_code == 422
+        assert api.get(liste).json() == vorher
+
+    for menge, rest, status in [
+        ("1.5", "1.5", "teilweise_gekauft"),
+        ("1.5", "1.5", "teilweise_gekauft"),
+        ("3", "0", "gekauft"),
+        ("2", "1", "teilweise_gekauft"),
+        ("0", "3", "offen"),
+    ]:
+        response = api.patch(korrektur, json={"gekaufte_menge": menge})
+        assert response.status_code == 200
+        daten = response.json()
+        assert Decimal(daten["gekaufte_menge"]) == Decimal(menge)
+        assert Decimal(daten["restmenge"]) == Decimal(rest)
+        assert daten["status"] == status
+        assert Decimal(daten["menge"]) == 3 and daten["einheit"] == "kg"
+        liste_danach = api.get(liste).json()
+        assert liste_danach["artikel"] == [daten]
+        assert liste_danach["fortschritt"]["gekauft"] == int(status == "gekauft")
+
+
+def test_gekaufte_menge_korrigieren_benoetigt_artikel_mit_menge(client):
+    api, _ = client
+    _, artikel = teileinkauf_anlegen(api)
+    assert api.patch(f"{artikel}/gekaufte-menge", json={"gekaufte_menge": "1"}).status_code == 422
+    assert api.patch("/api/artikel/999/gekaufte-menge", json={"gekaufte_menge": "1"}).status_code == 404
+
+
+def test_parallele_teileinkaeufe_addieren_auf_dem_aktuellen_stand(client):
+    api, _ = client
+    liste, artikel = teileinkauf_anlegen(api, "3")
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        abfragen = [
+            executor.submit(api.post, f"{artikel}/teileinkauf", json={"zusaetzliche_menge": menge})
+            for menge in ("1", "2")
+        ]
+        assert [abfrage.result().status_code for abfrage in abfragen] == [200, 200]
+    assert api.get(liste).json()["artikel"][0]["status"] == "gekauft"
+
+
+def test_datenbankfehler_rollt_bereits_ausgefuehrte_aenderung_zurueck(client):
+    api, engine = client
+    liste, artikel = teileinkauf_anlegen(api, "3")
+    artikel_id = int(artikel.rsplit("/", 1)[1])
+    vorher = api.get(liste).json()
+    with engine.begin() as verbindung:
+        verbindung.exec_driver_sql("""
+            CREATE TRIGGER test_fehler AFTER UPDATE OF gekaufte_menge ON einkaufsartikel
+            BEGIN
+                UPDATE einkaufslisten SET name = 'Fehlerhafte Aenderung';
+                SELECT RAISE(FAIL, 'Testfehler nach der Aenderung');
+            END
+        """)
+    with Session(engine) as session:
+        with pytest.raises(IntegrityError, match="Testfehler"):
+            business.teileinkauf_erfassen(session, artikel_id, Decimal("2"))
+        assert not session.in_transaction()
+        assert Decimal(session.get(Einkaufsartikel, artikel_id).gekaufte_menge) == 0
+    assert api.get(liste).json() == vorher
+
+
+def test_start_migriert_altbestand_einmal_ohne_datenverlust(tmp_path, monkeypatch):
+    engine = create_engine(f"sqlite:///{(tmp_path / 'altbestand.sqlite3').as_posix()}")
+    monkeypatch.setattr(main, "engine", engine)
+
+    def test_session():
+        with Session(engine, expire_on_commit=False) as session:
+            yield session
+
+    main.app.dependency_overrides[get_session] = test_session
+    try:
+        with engine.begin() as verbindung:
+            verbindung.exec_driver_sql("CREATE TABLE einkaufslisten (id INTEGER PRIMARY KEY, name VARCHAR NOT NULL)")
+            verbindung.exec_driver_sql("""
+                CREATE TABLE einkaufsartikel (
+                    id INTEGER PRIMARY KEY, einkaufsliste_id INTEGER NOT NULL,
+                    name VARCHAR NOT NULL, menge NUMERIC, einheit VARCHAR, gekauft BOOLEAN NOT NULL,
+                    FOREIGN KEY(einkaufsliste_id) REFERENCES einkaufslisten(id) ON DELETE CASCADE
+                )
+            """)
+            verbindung.exec_driver_sql("INSERT INTO einkaufslisten VALUES (1, 'Migros')")
+            verbindung.exec_driver_sql("""
+                INSERT INTO einkaufsartikel VALUES
+                  (1, 1, 'Milch', 1.125, 'Liter', 1), (2, 1, 'Reis', 3, 'kg', 0),
+                  (3, 1, 'Brot', NULL, NULL, 1), (4, 1, 'Zucker', 1.23456, 'kg', 1)
+            """)
+        with TestClient(main.app) as api:
+            vorher = api.get("/api/listen/1").json()
+            assert vorher["name"] == "Migros"
+            artikel = vorher["artikel"]
+            assert [a["status"] for a in artikel] == ["gekauft", "offen", "gekauft", "gekauft"]
+            assert Decimal(artikel[0]["gekaufte_menge"]) == Decimal("1.125")
+            assert artikel[2]["gekaufte_menge"] is None
+            assert Decimal(artikel[3]["gekaufte_menge"]) == Decimal("1.23456")
+            assert vorher["fortschritt"]["gekauft"] == 3
+            assert api.post("/api/artikel/4/teileinkauf", json={"zusaetzliche_menge": "0.1"}).status_code == 422
+            assert api.post("/api/artikel/2/teileinkauf", json={"zusaetzliche_menge": "2"}).status_code == 200
+            erwartet = api.get("/api/listen/1").json()
+        with TestClient(main.app) as api:
+            assert api.get("/api/listen/1").json() == erwartet
+    finally:
+        main.app.dependency_overrides.clear()
+        engine.dispose()

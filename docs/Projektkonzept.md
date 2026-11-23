@@ -1,51 +1,22 @@
 # Projektkonzept – Digitale Einkaufsliste – Projektgruppe C
 
-## 1. Projektidee
+## Projektidee
 
-Entwicklung einer einfachen Webapplikation zur Verwaltung einer Einkaufsliste. Alle Artikel werden dauerhaft in einer Datenbank gespeichert.
+Im FHNW-Modul Webbasierte Anwendungen (HS2026) setzt die Projektgruppe eine einfache lokale Webanwendung für Einkaufslisten um. Wer beim Einkauf nur einen Teil einer geplanten Menge findet, erfasst die tatsächlich gekaufte Menge. Beim nächsten Einkauf ist die offene Restmenge auf derselben Liste sichtbar.
 
-## 2. Funktionen
+## Funktionsumfang
 
-### 2.1 Must
+- Listen erstellen, anzeigen, umbenennen und mitsamt ihren Artikeln löschen.
+- Artikel hinzufügen, anzeigen, bearbeiten und löschen. Menge und Einheit sind optional. Neue Mengen sind positiv und haben maximal drei relevante Nachkommastellen.
+- Artikel offen lassen, einen Teileinkauf erfassen oder vollständig abhaken. Beim Öffnen eines abgehakten Artikels wird der Status zurückgesetzt.
+- Den Fortschritt anhand der vollständig gekauften Artikel anzeigen.
 
-1. Einkaufslisten (Aldi, Migros, Silvester)
-2. Artikel hinzufügen, bearbeiten und löschen (Entity)
-3. Mengen und Einheiten erfassen (Feld ist optional) -> Eingaben überprüfen (z. B. keine negativen Mengen)
-4. Artikel als gekauft markieren
-5. Einkaufsfortschritt anzeigen (z. B. 3/5 gekauft)
+## Technischer Aufbau
 
-### 2.2 Nice
+Die HTML/CSS-Oberfläche verwendet JavaScript und `fetch()`. FastAPI nimmt JSON-Anfragen entgegen. Der Business Layer prüft und berechnet die Mengen, bestimmt den Status und schliesst Transaktionen ab. SQLAlchemy speichert Einkaufslisten und Einkaufsartikel in SQLite. Ein Artikel gehört genau einer Liste, eine Liste kann mehrere Artikel enthalten.
 
-6. Darkmode
-7. Alle gekauften Artikel gesammelt entfernen
-8. Kategorien erstellen und verwalten (Zusatz-Entity)
-9. Artikel nach Status und Kategorie filtern
+Die [README mit dem aktuellen ER-Diagramm](../README.md#datenmodell) dokumentiert den umgesetzten Stand, das API und die Migration. [GUI-Mockup](GUI-Mockup.png) und [ursprüngliches ER-Modell](ER-Modell_Digitale_Einkaufsliste_konzeptionell.png) zeigen die frühe Entwurfsphase.
 
-### 2.3 Nicht vorgesehen:
+## Abgabe und Verteidigung
 
-10. Teilnahme von mehreren Personen
-11. Login
-12. Preise, Gesamtkosten
-13. Artikelsuche (Zusatz)
-14. Einkaufshistorie.
-
-## 3. Technischer Aufbau
-
-- Frontend: HTML, CSS, JavaScript
-- Backend: Python, FastAPI (REST)
-- Geschäftslogik: Validierung, Fortschritt, Sammellöschen
-- Datenhaltung: SQLAlchemy und SQLite
-- Datenmodell: 2 verbundene Entitäten (Einkaufsliste, Artikel)
-
-## 4. Abgabe
-
-- Funktionsfähige Webapplikation mit requirements.txt und Startanleitung
-- Kurze Dokumentation mit ER-Diagramm, Architektur, Reflexion und Quellen-/KI-Deklaration
-- Live-Demo und individuelle Verteidigung durch alle Gruppenmitglieder
-
-## 5. Bewertung
-
-- 10 Punkte: Gruppenprojekt (Mindestanforderungen + gezielte Erweiterungen)
-- 10 Punkte: Individuelle Verteidigung (jeder versteht den gesamten Code)
-
-**Ziel:** Eine einfache, vollständige und technisch saubere Anwendung mit sinnvollen Zusatzfunktionen entwickeln.
+Abgegeben werden der startfähige Python-Code mit `requirements.txt` und die Markdown-Dokumentation mit Zielsetzung, Datenmodell, Architektur, Reflexion sowie Quellen und KI-Deklaration. Die Anwendung wird vorgeführt. Jedes Gruppenmitglied soll alle Schichten und ihren Code erklären können. Die Bewertung umfasst laut Aufgabenstellung bis zu 10 Punkte für das Gruppenprojekt und bis zu 10 Punkte für die individuelle Verteidigung. [FHNW-Aufgabenstellung](Projektarbeit_py.pdf)

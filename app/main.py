@@ -6,8 +6,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import business, models
-from app.database import Base, engine
+from app import business
+from app.database import datenbank_initialisieren, engine
 from app.services import router
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -15,14 +15,21 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Durch den Import von models kennt Base beide Tabellen.
-    Base.metadata.create_all(engine)
+    datenbank_initialisieren(engine)
     yield
 
 
 app = FastAPI(title="Digitale Einkaufsliste", lifespan=lifespan)
 app.include_router(router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.middleware("http")
+async def oberflaeche_aktuell_halten(request: Request, call_next):
+    antwort = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        antwort.headers["Cache-Control"] = "no-cache"
+    return antwort
 
 
 @app.exception_handler(business.UngueltigeDaten)

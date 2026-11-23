@@ -12,27 +12,22 @@ def alle_listen(session: Session) -> list[Einkaufsliste]:
 
 
 def liste_finden(session: Session, liste_id: int) -> Einkaufsliste | None:
-    return session.get(Einkaufsliste, liste_id)
+    return session.get(Einkaufsliste, liste_id, options=[selectinload(Einkaufsliste.artikel)])
 
 
 def liste_erstellen(session: Session, name: str) -> Einkaufsliste:
-    liste = Einkaufsliste(name=name)
+    liste = Einkaufsliste(name=name, artikel=[])
     session.add(liste)
-    session.commit()
-    session.refresh(liste)
     return liste
 
 
 def liste_bearbeiten(session: Session, liste: Einkaufsliste, name: str) -> Einkaufsliste:
     liste.name = name
-    session.commit()
-    session.refresh(liste)
     return liste
 
 
 def liste_loeschen(session: Session, liste: Einkaufsliste) -> None:
     session.delete(liste)
-    session.commit()
 
 
 def artikel_erstellen(
@@ -40,11 +35,10 @@ def artikel_erstellen(
     menge: Decimal | None, einheit: str | None,
 ) -> Einkaufsartikel:
     artikel = Einkaufsartikel(
-        einkaufsliste=liste, name=name, menge=menge, einheit=einheit, gekauft=False,
+        einkaufsliste=liste, name=name, menge=menge, einheit=einheit,
+        gekauft_ohne_menge=False, gekaufte_menge="0",
     )
     session.add(artikel)
-    session.commit()
-    session.refresh(artikel)
     return artikel
 
 
@@ -52,25 +46,20 @@ def artikel_finden(session: Session, artikel_id: int) -> Einkaufsartikel | None:
     return session.get(Einkaufsartikel, artikel_id)
 
 
-def status_setzen(session: Session, artikel: Einkaufsartikel, gekauft: bool) -> Einkaufsartikel:
-    artikel.gekauft = gekauft
-    session.commit()
-    session.refresh(artikel)
-    return artikel
-
-
 def artikel_bearbeiten(
-    session: Session, artikel: Einkaufsartikel, name: str,
-    menge: Decimal | None, einheit: str | None,
+    artikel: Einkaufsartikel, name: str, menge: Decimal | None, einheit: str | None,
 ) -> Einkaufsartikel:
     artikel.name = name
     artikel.menge = menge
     artikel.einheit = einheit
-    session.commit()
-    session.refresh(artikel)
     return artikel
 
 
 def artikel_loeschen(session: Session, artikel: Einkaufsartikel) -> None:
     session.delete(artikel)
-    session.commit()
+
+
+def schreibzugriff_sichern(session: Session) -> None:
+    # SQLite-Schreibzugriff vor dem Lesen reservieren, damit eine zweite
+    # Anfrage beim Addieren oder Bearbeiten keinen veralteten Stand verwendet.
+    session.connection().exec_driver_sql("BEGIN IMMEDIATE")

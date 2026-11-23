@@ -30,7 +30,7 @@ def test_mehr_als_drei_nachkommastellen(menge):
     ([True, True], 2, 100),
 ])
 def test_fortschritt(status, gekauft, prozent):
-    artikel = [Einkaufsartikel(name="Milch", gekauft=wert) for wert in status]
+    artikel = [Einkaufsartikel(name="Milch", gekauft_ohne_menge=wert) for wert in status]
     fortschritt = fortschritt_berechnen(artikel)
     assert fortschritt.gesamt == len(status)
     assert fortschritt.gekauft == gekauft
