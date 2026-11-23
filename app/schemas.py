@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.business import Einkaufsstatus
 
@@ -48,11 +48,6 @@ class ArtikelAusgabe(BaseModel):
     gekaufte_menge: float | None
     restmenge: float | None
     status: Einkaufsstatus
-
-    @field_serializer("menge", "gekaufte_menge", "restmenge", when_used="json")
-    def menge_als_text(self, wert: float | None) -> str | None:
-        return str(wert) if wert is not None else None
-
 
 class Fortschritt(BaseModel):
     model_config = ConfigDict(from_attributes=True)
