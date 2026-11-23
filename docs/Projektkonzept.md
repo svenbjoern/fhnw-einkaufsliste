@@ -35,7 +35,7 @@ Entwicklung einer einfachen Webapplikation zur Verwaltung einer Einkaufsliste. A
 - Backend: Python, FastAPI (REST)
 - Geschäftslogik: Validierung, Fortschritt, Sammellöschen
 - Datenhaltung: SQLAlchemy und SQLite
-- Datenmodell: 2 verbundene Entitäten (Einkaufsliste, Artikel und Kategorie(Zusatz, 1)
+- Datenmodell: 2 verbundene Entitäten (Einkaufsliste, Artikel)
 
 ## 4. Abgabe
 
