@@ -24,14 +24,6 @@ app.include_router(router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-@app.middleware("http")
-async def oberflaeche_aktuell_halten(request: Request, call_next):
-    antwort = await call_next(request)
-    if request.url.path == "/" or request.url.path.startswith("/static/"):
-        antwort.headers["Cache-Control"] = "no-cache"
-    return antwort
-
-
 @app.exception_handler(business.UngueltigeDaten)
 async def ungueltige_daten(request: Request, error: business.UngueltigeDaten):
     return JSONResponse(status_code=422, content={"detail": str(error)})
@@ -44,10 +36,13 @@ async def nicht_gefunden(request: Request, error: business.NichtGefunden):
 
 @app.exception_handler(RequestValidationError)
 async def falsches_format(request: Request, error: RequestValidationError):
-    return JSONResponse(status_code=422, content={
-        "detail": "Ungültige Eingabe. Bitte Pflichtfelder und Datentypen prüfen.",
-        "felder": [".".join(str(teil) for teil in fehler["loc"]) for fehler in error.errors()],
-    })
+    feld = error.errors()[0]["loc"][-1]
+    meldung = "Ungültige Eingabe. Bitte Pflichtfelder und Datentypen prüfen."
+    if feld == "name":
+        meldung = "Bitte gib einen Namen ein."
+    if feld in ("menge", "zusaetzliche_menge"):
+        meldung = "Die Menge muss grösser als null sein und darf höchstens drei Nachkommastellen haben."
+    return JSONResponse(status_code=422, content={"detail": meldung})
 
 
 @app.get("/", include_in_schema=False)
