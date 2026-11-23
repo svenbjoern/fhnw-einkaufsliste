@@ -105,11 +105,11 @@ function mitEinheit(menge, einheit) {
 }
 
 function teileinkaufMoeglich(artikel) {
-  return !artikel.gekauft && (mengeInTausendsteln(artikel.restmenge) ?? 0n) > 0n;
+  return artikel.status != "gekauft" && (mengeInTausendsteln(artikel.restmenge) ?? 0n) > 0n;
 }
 
 function teileinkaufSperrgrund(artikel) {
-  if (artikel.gekauft) return "Dieser Artikel ist bereits vollständig gekauft.";
+  if (artikel.status === "gekauft") return "Dieser Artikel ist bereits vollständig gekauft.";
   return "Speichere zuerst eine positive geplante Menge mit maximal drei Nachkommastellen.";
 }
 
@@ -208,11 +208,11 @@ function detailsAnzeigen() {
   artikelElement.replaceChildren();
   for (const artikel of liste.artikel) {
     const li = document.createElement("li");
-    li.classList.toggle("gekauft", artikel.gekauft);
+    li.classList.toggle("gekauft", artikel.status === "gekauft");
     const label = document.createElement("label");
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
-    checkbox.checked = artikel.gekauft;
+    checkbox.checked = artikel.status === "gekauft";
     checkbox.indeterminate = artikel.status === "teilweise_gekauft";
     const info = document.createElement("div");
     info.className = "artikel-info";
@@ -223,7 +223,7 @@ function detailsAnzeigen() {
     const zusatz = document.createElement("small");
     zusatz.textContent = artikel.status === "teilweise_gekauft"
       ? `Teilweise gekauft · ${mengeFormatieren(artikel.gekaufte_menge)} von ${mitEinheit(mengeFormatieren(artikel.menge), artikel.einheit)} gekauft · ${mitEinheit(mengeFormatieren(artikel.restmenge), artikel.einheit)} offen`
-      : [mengeFormatieren(artikel.menge), artikel.einheit, artikel.gekauft ? "Gekauft" : "Offen"].filter(Boolean).join(" · ");
+      : [mengeFormatieren(artikel.menge), artikel.einheit, artikel.status === "gekauft" ? "Gekauft" : "Offen"].filter(Boolean).join(" · ");
     beschreibung.append(name, zusatz);
     label.append(checkbox, beschreibung);
     info.append(label);
@@ -269,7 +269,7 @@ function detailsAnzeigen() {
         await api(`/artikel/${artikel.id}/status`, "PATCH", { gekauft: checkbox.checked });
         await laden();
       } catch (fehler) {
-        checkbox.checked = artikel.gekauft;
+        checkbox.checked = artikel.status === "gekauft";
         checkbox.indeterminate = artikel.status === "teilweise_gekauft";
         fehlerAnzeigen(fehler);
       } finally {

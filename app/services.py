@@ -5,8 +5,8 @@ from app import business
 from app.database import get_session
 from app.models import Einkaufsartikel, Einkaufsliste
 from app.schemas import (
-    ArtikelAusgabe, ArtikelErstellen, ArtikelStatus, Fortschritt, ListeAusgabe,
-    ListeErstellen, TeileinkaufErfassen,
+    ArtikelAusgabe, ArtikelEingabe, ArtikelStatusEingabe, Fortschritt, ListeAusgabe,
+    ListeEingabe, TeileinkaufEingabe,
 )
 
 router = APIRouter(prefix="/api", tags=["Einkaufslisten"])
@@ -17,7 +17,7 @@ def artikel_ausgeben(artikel: Einkaufsartikel) -> ArtikelAusgabe:
     restmenge = business.restmenge_berechnen(artikel)
     return ArtikelAusgabe(
         id=artikel.id, einkaufsliste_id=artikel.einkaufsliste_id, name=artikel.name,
-        menge=artikel.menge, einheit=artikel.einheit, gekauft=status == "gekauft",
+        menge=artikel.menge, einheit=artikel.einheit,
         gekaufte_menge=artikel.gekaufte_menge if restmenge is not None else None,
         restmenge=restmenge, status=status,
     )
@@ -36,7 +36,7 @@ def alle_listen(session: Session = Depends(get_session)):
 
 
 @router.post("/listen", response_model=ListeAusgabe, status_code=201)
-def liste_erstellen(daten: ListeErstellen, session: Session = Depends(get_session)):
+def liste_erstellen(daten: ListeEingabe, session: Session = Depends(get_session)):
     return liste_ausgeben(business.liste_erstellen(session, daten.name))
 
 
@@ -46,7 +46,7 @@ def liste_anzeigen(liste_id: int, session: Session = Depends(get_session)):
 
 
 @router.put("/listen/{liste_id}", response_model=ListeAusgabe)
-def liste_bearbeiten(liste_id: int, daten: ListeErstellen, session: Session = Depends(get_session)):
+def liste_bearbeiten(liste_id: int, daten: ListeEingabe, session: Session = Depends(get_session)):
     return liste_ausgeben(business.liste_bearbeiten(session, liste_id, daten.name))
 
 
@@ -57,22 +57,22 @@ def liste_loeschen(liste_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("/listen/{liste_id}/artikel", response_model=ArtikelAusgabe, status_code=201)
-def artikel_hinzufuegen(liste_id: int, daten: ArtikelErstellen, session: Session = Depends(get_session)):
+def artikel_hinzufuegen(liste_id: int, daten: ArtikelEingabe, session: Session = Depends(get_session)):
     return artikel_ausgeben(business.artikel_hinzufuegen(session, liste_id, daten.name, daten.menge, daten.einheit))
 
 
 @router.patch("/artikel/{artikel_id}/status", response_model=ArtikelAusgabe)
-def artikel_status_setzen(artikel_id: int, daten: ArtikelStatus, session: Session = Depends(get_session)):
+def artikel_status_setzen(artikel_id: int, daten: ArtikelStatusEingabe, session: Session = Depends(get_session)):
     return artikel_ausgeben(business.artikel_status_setzen(session, artikel_id, daten.gekauft))
 
 
 @router.post("/artikel/{artikel_id}/teileinkauf", response_model=ArtikelAusgabe)
-def teileinkauf_erfassen(artikel_id: int, daten: TeileinkaufErfassen, session: Session = Depends(get_session)):
+def teileinkauf_erfassen(artikel_id: int, daten: TeileinkaufEingabe, session: Session = Depends(get_session)):
     return artikel_ausgeben(business.teileinkauf_erfassen(session, artikel_id, daten.zusaetzliche_menge))
 
 
 @router.put("/artikel/{artikel_id}", response_model=ArtikelAusgabe)
-def artikel_bearbeiten(artikel_id: int, daten: ArtikelErstellen, session: Session = Depends(get_session)):
+def artikel_bearbeiten(artikel_id: int, daten: ArtikelEingabe, session: Session = Depends(get_session)):
     # Dasselbe Eingabeschema wie beim Hinzufügen: Name, Menge und Einheit, ohne Status.
     return artikel_ausgeben(business.artikel_bearbeiten(session, artikel_id, daten.name, daten.menge, daten.einheit))
 

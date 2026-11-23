@@ -3,13 +3,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_valid
 from app.business import Einkaufsstatus
 
 
-class ListeErstellen(BaseModel):
+class ListeEingabe(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str = Field(min_length=1)
 
 
-class ArtikelErstellen(BaseModel):
+class ArtikelEingabe(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str = Field(min_length=1)
@@ -24,11 +24,11 @@ class ArtikelErstellen(BaseModel):
         return menge
 
 
-class ArtikelStatus(BaseModel):
+class ArtikelStatusEingabe(BaseModel):
     gekauft: bool
 
 
-class TeileinkaufErfassen(BaseModel):
+class TeileinkaufEingabe(BaseModel):
     zusaetzliche_menge: float = Field(gt=0, allow_inf_nan=False)
 
     @field_validator("zusaetzliche_menge")
@@ -45,7 +45,6 @@ class ArtikelAusgabe(BaseModel):
     name: str
     menge: float | None
     einheit: str | None
-    gekauft: bool
     gekaufte_menge: float | None
     restmenge: float | None
     status: Einkaufsstatus
