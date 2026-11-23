@@ -21,9 +21,9 @@ def datenbank_initialisieren(db_engine):
 
 
 @event.listens_for(engine, "connect")
-def enable_foreign_keys(connection, connection_record):
+def sqlite_fremdschluessel_aktivieren(verbindung, verbindungsinfo):
     # SQLite prüft Fremdschlüssel nur, wenn sie pro Verbindung aktiviert werden.
-    connection.execute("PRAGMA foreign_keys=ON")
+    verbindung.execute("PRAGMA foreign_keys=ON")
 
 
 def get_session():

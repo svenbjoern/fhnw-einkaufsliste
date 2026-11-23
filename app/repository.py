@@ -19,9 +19,8 @@ def liste_erstellen(session: Session, name: str) -> Einkaufsliste:
     return liste
 
 
-def liste_bearbeiten(session: Session, liste: Einkaufsliste, name: str) -> Einkaufsliste:
+def liste_bearbeiten(liste: Einkaufsliste, name: str) -> None:
     liste.name = name
-    return liste
 
 
 def liste_loeschen(session: Session, liste: Einkaufsliste) -> None:
@@ -45,11 +44,10 @@ def artikel_finden(session: Session, artikel_id: int) -> Einkaufsartikel | None:
 
 def artikel_bearbeiten(
     artikel: Einkaufsartikel, name: str, menge: float | None, einheit: str | None,
-) -> Einkaufsartikel:
+) -> None:
     artikel.name = name
     artikel.menge = menge
     artikel.einheit = einheit
-    return artikel
 
 
 def artikel_loeschen(session: Session, artikel: Einkaufsartikel) -> None:
