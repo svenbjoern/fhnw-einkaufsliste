@@ -110,7 +110,6 @@ def liste_erstellen(session: Session, name: str) -> Einkaufsliste:
 
 def liste_bearbeiten(session: Session, liste_id: int, name: str) -> Einkaufsliste:
     with session.begin():
-        repository.schreibzugriff_sichern(session)
         liste = liste_finden(session, liste_id)
         repository.liste_bearbeiten(session, liste, name_validieren(name))
     return liste
@@ -118,7 +117,6 @@ def liste_bearbeiten(session: Session, liste_id: int, name: str) -> Einkaufslist
 
 def liste_loeschen(session: Session, liste_id: int) -> None:
     with session.begin():
-        repository.schreibzugriff_sichern(session)
         repository.liste_loeschen(session, liste_finden(session, liste_id))
 
 
@@ -126,7 +124,6 @@ def artikel_hinzufuegen(
     session: Session, liste_id: int, name: str, menge: Decimal | None, einheit: str | None,
 ) -> Einkaufsartikel:
     with session.begin():
-        repository.schreibzugriff_sichern(session)
         liste = liste_finden(session, liste_id)
         name = name_validieren(name)
         menge = geplante_menge_validieren(menge)
@@ -136,7 +133,6 @@ def artikel_hinzufuegen(
 
 def artikel_status_setzen(session: Session, artikel_id: int, gekauft: bool) -> Einkaufsartikel:
     with session.begin():
-        repository.schreibzugriff_sichern(session)
         artikel = artikel_finden(session, artikel_id)
         menge_vorhanden = positive_menge(artikel.menge)
         artikel.gekaufte_menge = str(artikel.menge) if gekauft and menge_vorhanden else "0"
@@ -146,7 +142,6 @@ def artikel_status_setzen(session: Session, artikel_id: int, gekauft: bool) -> E
 
 def teileinkauf_erfassen(session: Session, artikel_id: int, zusaetzliche_menge: Decimal) -> Einkaufsartikel:
     with session.begin():
-        repository.schreibzugriff_sichern(session)
         artikel = artikel_finden(session, artikel_id)
         if not positive_menge(artikel.menge) or not hat_gueltige_praezision(artikel.menge):
             raise UngueltigeDaten("Teileinkäufe benötigen eine positive geplante Menge mit maximal drei Nachkommastellen.")
@@ -163,7 +158,6 @@ def teileinkauf_erfassen(session: Session, artikel_id: int, zusaetzliche_menge: 
 
 def gekaufte_menge_korrigieren(session: Session, artikel_id: int, menge: Decimal) -> Einkaufsartikel:
     with session.begin():
-        repository.schreibzugriff_sichern(session)
         artikel = artikel_finden(session, artikel_id)
         if not positive_menge(artikel.menge) or not hat_gueltige_praezision(artikel.menge):
             raise UngueltigeDaten("Die Korrektur benötigt eine positive geplante Menge mit maximal drei Nachkommastellen.")
@@ -185,7 +179,6 @@ def artikel_bearbeiten(
     session: Session, artikel_id: int, name: str, menge: Decimal | None, einheit: str | None,
 ) -> Einkaufsartikel:
     with session.begin():
-        repository.schreibzugriff_sichern(session)
         artikel = artikel_finden(session, artikel_id)
         name = name_validieren(name)
         if menge != artikel.menge:
@@ -210,5 +203,4 @@ def artikel_bearbeiten(
 
 def artikel_loeschen(session: Session, artikel_id: int) -> None:
     with session.begin():
-        repository.schreibzugriff_sichern(session)
         repository.artikel_loeschen(session, artikel_finden(session, artikel_id))

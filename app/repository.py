@@ -57,9 +57,3 @@ def artikel_bearbeiten(
 
 def artikel_loeschen(session: Session, artikel: Einkaufsartikel) -> None:
     session.delete(artikel)
-
-
-def schreibzugriff_sichern(session: Session) -> None:
-    # SQLite-Schreibzugriff vor dem Lesen reservieren, damit eine zweite
-    # Anfrage beim Addieren oder Bearbeiten keinen veralteten Stand verwendet.
-    session.connection().exec_driver_sql("BEGIN IMMEDIATE")
